@@ -7,26 +7,12 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="hero-panel">
-        <div class="hero-kicker">Desktop Builder</div>
-        <h1>KaroSpaceRBuilder</h1>
-        <p class="hero-copy">
-          A thin desktop wrapper for the bundled KaroSpaceR inspect and export contracts.
-          The app discovers a dataset, fills a build config, and runs the export pipeline without duplicating backend logic.
-        </p>
-        <div class="hero-badges">
-          <span>Inspect JSON</span>
-          <span>Config JSON</span>
-          <span>Standalone HTML</span>
-        </div>
-        <div class="hero-callout">
-          <div class="callout-label">Backend contract</div>
-          <code>inspect -&gt; default_config -&gt; build</code>
-        </div>
-      </aside>
+    <header class="hero-panel">
+      <span class="hero-kicker">Desktop Builder</span>
+      <h1>KaroSpaceRBuilder</h1>
+    </header>
 
-      <main class="workspace">
+    <main class="workspace">
         <section class="card">
           <div class="card-header">
             <div>
@@ -40,7 +26,7 @@
             <label class="field">
               <span>Rscript Fallback</span>
               <div class="path-row">
-                <input id="rscript-path" type="text" placeholder="Optional when bundled Apple Silicon R is available" />
+                <input id="rscript-path" type="text" placeholder="Optional — bundled R used when present" />
                 <button id="browse-rscript" type="button">Browse</button>
               </div>
             </label>
@@ -204,8 +190,7 @@
           </div>
           <pre id="log-output" class="log-output">Ready.</pre>
         </section>
-      </main>
-    </div>
+    </main>
 
     <script type="module" src="./app.js"></script>
   </body>

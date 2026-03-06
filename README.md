@@ -70,9 +70,9 @@ from this Mac, using the DMG built after `npm run stage:r`.
 Example:
 
 ```bash
-gh release create v0.2.0 \
-  src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/KaroSpaceRBuilder_0.2.0_aarch64.dmg \
-  --title "KaroSpaceRBuilder v0.2.0" \
+gh release create v0.2.1 \
+  src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/KaroSpaceRBuilder_0.2.1_aarch64.dmg \
+  --title "KaroSpaceRBuilder v0.2.1" \
   --notes "Apple Silicon DMG with bundled KaroSpaceR backend and bundled R runtime."
 ```
 
