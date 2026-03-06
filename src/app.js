@@ -1,6 +1,7 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
 const state = {
+  backendInfo: null,
   inspect: null,
   config: null,
   lastOutputPath: null,
@@ -9,7 +10,7 @@ const state = {
 
 const elements = {
   rscriptPath: document.getElementById("rscript-path"),
-  karospacerRoot: document.getElementById("karospacer-root"),
+  backendSummary: document.getElementById("backend-summary"),
   inputPath: document.getElementById("input-path"),
   metadataInputPath: document.getElementById("metadata-input-path"),
   inspectButton: document.getElementById("inspect-button"),
@@ -17,7 +18,6 @@ const elements = {
   openOutputButton: document.getElementById("open-output-button"),
   guessPaths: document.getElementById("guess-paths"),
   browseRscript: document.getElementById("browse-rscript"),
-  browseKaroSpaceRRoot: document.getElementById("browse-karospacer-root"),
   browseInput: document.getElementById("browse-input"),
   browseMetadataInput: document.getElementById("browse-metadata-input"),
   chooseOutput: document.getElementById("choose-output"),
@@ -67,7 +67,6 @@ function requireInvoke() {
 function pathPayload() {
   return {
     rscriptPath: elements.rscriptPath.value.trim(),
-    karospacerRoot: elements.karospacerRoot.value.trim(),
     inputPath: elements.inputPath.value.trim(),
     metadataInputPath: elements.metadataInputPath.value.trim() || null
   };
@@ -76,9 +75,17 @@ function pathPayload() {
 function assertRequiredPaths() {
   const paths = pathPayload();
   if (!paths.rscriptPath) throw new Error("Rscript path is required.");
-  if (!paths.karospacerRoot) throw new Error("KaroSpaceR repo path is required.");
   if (!paths.inputPath) throw new Error("Input RDS path is required.");
   return paths;
+}
+
+function formatBackendSummary(info = null) {
+  if (!info?.backendVersion) {
+    return "KaroSpaceR is bundled with the app. Only Rscript is required locally.";
+  }
+
+  const revision = info.backendRevision ? ` (${info.backendRevision})` : "";
+  return `Bundled KaroSpaceR ${info.backendVersion}${revision}. Only Rscript is required locally.`;
 }
 
 function setSelectOptions(select, values, allowEmpty = false) {
@@ -280,9 +287,15 @@ async function pickPath(mode, title, defaultName = null) {
 async function guessPaths() {
   try {
     const result = await callBackend("guess_backend_paths", {});
+    state.backendInfo = result;
     if (result.rscriptPath) elements.rscriptPath.value = result.rscriptPath;
-    if (result.karospacerRoot) elements.karospacerRoot.value = result.karospacerRoot;
-    log("Guessed backend paths.", "replace");
+    elements.backendSummary.textContent = formatBackendSummary(result);
+    log(
+      result.rscriptPath
+        ? `Guessed Rscript path.\n${formatBackendSummary(result)}`
+        : formatBackendSummary(result),
+      "replace"
+    );
   } catch (error) {
     log(String(error), "replace");
   }
@@ -376,11 +389,6 @@ elements.openOutputButton.addEventListener("click", openOutput);
 elements.browseRscript.addEventListener("click", async () => {
   const path = await pickPath("file", "Choose Rscript");
   if (path) elements.rscriptPath.value = path;
-});
-
-elements.browseKaroSpaceRRoot.addEventListener("click", async () => {
-  const path = await pickPath("folder", "Choose KaroSpaceR Repo");
-  if (path) elements.karospacerRoot.value = path;
 });
 
 elements.browseInput.addEventListener("click", async () => {

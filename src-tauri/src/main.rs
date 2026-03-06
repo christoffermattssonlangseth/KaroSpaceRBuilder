@@ -6,12 +6,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InspectRequest {
     rscript_path: String,
-    karospacer_root: String,
     input_path: String,
     metadata_input_path: Option<String>,
     assay: Option<String>,
@@ -23,7 +23,6 @@ struct InspectRequest {
 #[serde(rename_all = "camelCase")]
 struct BuildRequest {
     rscript_path: String,
-    karospacer_root: String,
     config: Value,
 }
 
@@ -55,7 +54,8 @@ struct BuildResponse {
 #[serde(rename_all = "camelCase")]
 struct SuggestedPaths {
     rscript_path: Option<String>,
-    karospacer_root: Option<String>,
+    backend_version: Option<String>,
+    backend_revision: Option<String>,
 }
 
 #[derive(Debug)]
@@ -74,11 +74,11 @@ fn canonicalize_lossy(path: impl AsRef<Path>) -> String {
         .to_string()
 }
 
-fn script_path(root: &str, script_name: &str) -> Result<PathBuf, String> {
-    let path = Path::new(root).join("scripts").join(script_name);
+fn script_path(root: &Path, script_name: &str) -> Result<PathBuf, String> {
+    let path = root.join("scripts").join(script_name);
     if !path.exists() {
         return Err(format!(
-            "Could not find {} inside KaroSpaceR repo: {}",
+            "Could not find {} inside bundled KaroSpaceR backend: {}",
             script_name,
             path.to_string_lossy()
         ));
@@ -110,14 +110,9 @@ where
     })
 }
 
-fn ensure_backend_paths(rscript_path: &str, karospacer_root: &str) -> Result<(), String> {
+fn ensure_rscript_path(rscript_path: &str) -> Result<(), String> {
     if !Path::new(rscript_path).exists() {
         return Err(format!("Rscript path does not exist: {rscript_path}"));
-    }
-    if !Path::new(karospacer_root).exists() {
-        return Err(format!(
-            "KaroSpaceR repo path does not exist: {karospacer_root}"
-        ));
     }
     Ok(())
 }
@@ -144,20 +139,67 @@ fn suggest_rscript_path() -> Option<String> {
         .map(canonicalize_lossy)
 }
 
-fn suggest_karospacer_root() -> Option<String> {
-    let cwd = std::env::current_dir().ok()?;
-    let sibling = cwd.parent()?.join("KaroSpaceR");
-    if sibling.exists() {
-        return Some(canonicalize_lossy(sibling));
+fn bundled_backend_dev_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("vendor")
+        .join("KaroSpaceR")
+}
+
+fn description_field(root: &Path, field_name: &str) -> Option<String> {
+    let description = fs::read_to_string(root.join("DESCRIPTION")).ok()?;
+    let prefix = format!("{field_name}:");
+    description.lines().find_map(|line| {
+        line.strip_prefix(&prefix)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn vendored_revision(root: &Path) -> Option<String> {
+    let metadata = fs::read_to_string(root.join("VENDORED_FROM.txt")).ok()?;
+    metadata.lines().find_map(|line| {
+        line.strip_prefix("source_commit_short=")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn resolve_bundled_backend_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dev_candidate = bundled_backend_dev_root();
+    if dev_candidate.exists() {
+        return Ok(dev_candidate);
     }
-    None
+
+    let resource_candidate = app
+        .path()
+        .resource_dir()
+        .map_err(|err| format!("Could not resolve the app resource directory: {err}"))?
+        .join("backend")
+        .join("KaroSpaceR");
+
+    if resource_candidate.exists() {
+        return Ok(resource_candidate);
+    }
+
+    Err(format!(
+        "Could not resolve the bundled KaroSpaceR backend. Looked in:\n- {}\n- {}",
+        dev_candidate.to_string_lossy(),
+        resource_candidate.to_string_lossy()
+    ))
 }
 
 #[tauri::command]
-fn guess_backend_paths() -> SuggestedPaths {
+fn guess_backend_paths(app: tauri::AppHandle) -> SuggestedPaths {
+    let backend_root = resolve_bundled_backend_root(&app).ok();
     SuggestedPaths {
         rscript_path: suggest_rscript_path(),
-        karospacer_root: suggest_karospacer_root(),
+        backend_version: backend_root
+            .as_deref()
+            .and_then(|root| description_field(root, "Version")),
+        backend_revision: backend_root.as_deref().and_then(vendored_revision),
     }
 }
 
@@ -184,10 +226,13 @@ fn pick_path(request: PickPathRequest) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
-    ensure_backend_paths(&request.rscript_path, &request.karospacer_root)?;
-    let karospacer_root = Path::new(&request.karospacer_root);
-    let script = script_path(&request.karospacer_root, "karospace_inspect_r.R")?;
+fn inspect_dataset(
+    app: tauri::AppHandle,
+    request: InspectRequest,
+) -> Result<InspectResponse, String> {
+    ensure_rscript_path(&request.rscript_path)?;
+    let backend_root = resolve_bundled_backend_root(&app)?;
+    let script = script_path(&backend_root, "karospace_inspect_r.R")?;
 
     let mut args = vec!["--input".to_string(), request.input_path.clone()];
     if let Some(metadata_input_path) = request.metadata_input_path.as_ref() {
@@ -213,7 +258,7 @@ fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
         args.push(gene_limit.to_string());
     }
 
-    let output = run_rscript(&request.rscript_path, karospacer_root, &script, args)?;
+    let output = run_rscript(&request.rscript_path, &backend_root, &script, args)?;
     if output.status != 0 {
         return Err(format!(
             "Inspect failed with status {}.\nstdout:\n{}\nstderr:\n{}",
@@ -235,10 +280,10 @@ fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
 }
 
 #[tauri::command]
-fn build_viewer(request: BuildRequest) -> Result<BuildResponse, String> {
-    ensure_backend_paths(&request.rscript_path, &request.karospacer_root)?;
-    let karospacer_root = Path::new(&request.karospacer_root);
-    let script = script_path(&request.karospacer_root, "karospace_build_r.R")?;
+fn build_viewer(app: tauri::AppHandle, request: BuildRequest) -> Result<BuildResponse, String> {
+    ensure_rscript_path(&request.rscript_path)?;
+    let backend_root = resolve_bundled_backend_root(&app)?;
+    let script = script_path(&backend_root, "karospace_build_r.R")?;
 
     let output_path = request
         .config
@@ -258,7 +303,7 @@ fn build_viewer(request: BuildRequest) -> Result<BuildResponse, String> {
 
     let output = run_rscript(
         &request.rscript_path,
-        karospacer_root,
+        &backend_root,
         &script,
         [
             "--config".to_string(),

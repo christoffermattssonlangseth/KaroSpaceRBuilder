@@ -12,7 +12,7 @@
         <div class="hero-kicker">Desktop Builder</div>
         <h1>KaroSpaceRBuilder</h1>
         <p class="hero-copy">
-          A thin desktop wrapper for the KaroSpaceR inspect and export contracts.
+          A thin desktop wrapper for the bundled KaroSpaceR inspect and export contracts.
           The app discovers a dataset, fills a build config, and runs the export pipeline without duplicating backend logic.
         </p>
         <div class="hero-badges">
@@ -31,9 +31,9 @@
           <div class="card-header">
             <div>
               <div class="eyebrow">Setup</div>
-              <h2>Backend Paths</h2>
+              <h2>Runtime</h2>
             </div>
-            <button id="guess-paths" class="ghost-button">Guess Paths</button>
+            <button id="guess-paths" class="ghost-button">Guess Rscript</button>
           </div>
 
           <div class="field-grid">
@@ -45,13 +45,12 @@
               </div>
             </label>
 
-            <label class="field">
-              <span>KaroSpaceR Repo</span>
-              <div class="path-row">
-                <input id="karospacer-root" type="text" placeholder="/path/to/KaroSpaceR" />
-                <button id="browse-karospacer-root" type="button">Browse</button>
+            <div class="field field-note">
+              <span>Bundled Backend</span>
+              <div id="backend-summary" class="inline-note">
+                KaroSpaceR is bundled with the app. Only Rscript is required locally.
               </div>
-            </label>
+            </div>
 
             <label class="field">
               <span>Input RDS</span>

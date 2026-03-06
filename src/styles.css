@@ -160,6 +160,16 @@ body {
   color: var(--muted);
 }
 
+.inline-note {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
 input,
 select,
 textarea,

@@ -12,11 +12,14 @@ It must remain a thin UI/process layer. It should help a user choose files, insp
 - Do not add dataset normalization, Seurat parsing, or payload-building logic here.
 - Do not modify the Python `KaroSpace` repository from this repo.
 - Do not assume shell startup files will populate `$PATH` inside a desktop app.
-- Treat `Rscript` and the local `KaroSpaceR` repo as explicit dependencies unless the product direction changes.
+- Treat `Rscript` as an explicit dependency.
+- Treat the bundled `vendor/KaroSpaceR` snapshot as the runtime backend, while keeping the sibling `../KaroSpaceR` repo as the canonical upstream source.
 
 ## Backend Contract
 
-This repo depends on the following stable contracts in the sibling `KaroSpaceR` repo:
+This repo depends on the following stable contracts from `KaroSpaceR`.
+At runtime it uses the vendored snapshot in `vendor/KaroSpaceR`.
+When the contract changes, update `KaroSpaceR` first and then refresh the vendored snapshot here.
 
 - Inspect:
   - `scripts/karospace_inspect_r.R`
@@ -28,14 +31,13 @@ This repo depends on the following stable contracts in the sibling `KaroSpaceR` 
 The intended flow is:
 
 1. choose `Rscript`
-2. choose the local `KaroSpaceR` repo
-3. choose an `.rds` input
-4. run inspect
-5. load `default_config` from inspect JSON
-6. let the user edit config values
-7. write config JSON
-8. run build
-9. open the exported HTML
+2. choose an `.rds` input
+3. run inspect
+4. load `default_config` from inspect JSON
+5. let the user edit config values
+6. write config JSON
+7. run build
+8. open the exported HTML
 
 If the backend contract needs to change, prefer changing `KaroSpaceR` first and then adapting this repo. Do not invent a parallel builder-only contract.
 
@@ -46,8 +48,10 @@ Current scaffolded scope:
 - Tauri desktop shell
 - Static frontend in `src/`
 - Native file/folder pickers
+- Bundled `KaroSpaceR` backend snapshot in `vendor/KaroSpaceR`
+- GitHub Actions macOS release packaging/signing flow
 - Rust commands for:
-  - guessing backend paths
+  - guessing runtime paths
   - choosing files/folders
   - running inspect
   - running build
@@ -56,7 +60,6 @@ Current scaffolded scope:
 
 Not implemented yet:
 
-- packaged app distribution
 - persistent settings storage
 - progress streaming from long-running R jobs
 - richer validation and better field-level error rendering
@@ -78,6 +81,8 @@ Not implemented yet:
   Tauri app configuration.
 - `src-tauri/capabilities/default.json`
   Tauri window capability declaration.
+- `.github/workflows/desktop-release.yml`
+  Tagged macOS release packaging/signing pipeline.
 
 ## Working Rules For Agents
 
@@ -87,13 +92,15 @@ Not implemented yet:
 - If adding new export options, first verify that `KaroSpaceR` exposes them through inspect/build.
 - Use the inspect JSON `default_config` as the source of truth for initial UI state.
 - Keep the builder resilient to missing tools and bad paths with clear error messages.
+- Keep the vendored backend snapshot traceable to an upstream `KaroSpaceR` revision.
 - Prefer calling existing Rust commands over adding frontend-only assumptions.
 
 ## Tauri Notes
 
 - This repo is using Tauri v2 concepts and config structure.
 - GUI apps often do not inherit shell environment setup, so do not assume `Rscript` is discoverable automatically.
-- Prefer letting the user browse to `Rscript` and the `KaroSpaceR` repo explicitly.
+- Prefer letting the user browse to `Rscript` explicitly.
+- Resolve bundled backend files from app resources in packaged builds instead of assuming a sibling checkout exists.
 - Avoid broad command execution surfaces; keep Rust commands narrow and task-specific.
 - If adding OS integrations, keep macOS first and avoid unnecessary platform-specific branching until needed.
 
@@ -116,24 +123,23 @@ npm install
 npm run dev
 ```
 
-Before blaming the builder, verify the backend directly in the sibling repo:
+Before blaming the builder, verify the backend directly against the vendored snapshot or the sibling upstream repo:
 
 ```bash
-cd ../KaroSpaceR
-Rscript tests/smoke_export.R
-Rscript scripts/karospace_inspect_r.R --input /path/to/object.rds
+Rscript vendor/KaroSpaceR/scripts/karospace_inspect_r.R --input /path/to/object.rds
+Rscript vendor/KaroSpaceR/scripts/karospace_build_r.R --config /path/to/build.json
 ```
 
 ## Near-Term Priorities
 
 Priority order for future work:
 
-1. make the current Tauri scaffold runnable on this machine
-2. add better inspect/build error presentation in the UI
-3. persist last-used `Rscript` and repo paths
-4. add progress/log streaming for long exports
-5. improve config editing UX for colors, genes, and advanced options
-6. package the app for macOS
+1. add better inspect/build error presentation in the UI
+2. persist last-used `Rscript` path
+3. add progress/log streaming for long exports
+4. improve config editing UX for colors, genes, and advanced options
+5. validate the signed macOS GitHub release flow with real Apple secrets
+6. evaluate whether bundling an R runtime is worth the complexity
 
 ## Output Expectations
 
