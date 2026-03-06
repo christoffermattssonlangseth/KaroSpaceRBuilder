@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KaroSpaceRBuilder",
+  "version": "0.1.0",
+  "identifier": "org.karospace.karospacerbuilder",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "KaroSpaceRBuilder",
+        "width": 1480,
+        "height": 980,
+        "resizable": true,
+        "minWidth": 1120,
+        "minHeight": 820
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}

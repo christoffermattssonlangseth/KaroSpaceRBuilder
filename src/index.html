@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KaroSpaceRBuilder</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="hero-panel">
+        <div class="hero-kicker">Desktop Builder</div>
+        <h1>KaroSpaceRBuilder</h1>
+        <p class="hero-copy">
+          A thin desktop wrapper for the KaroSpaceR inspect and export contracts.
+          The app discovers a dataset, fills a build config, and runs the export pipeline without duplicating backend logic.
+        </p>
+        <div class="hero-badges">
+          <span>Inspect JSON</span>
+          <span>Config JSON</span>
+          <span>Standalone HTML</span>
+        </div>
+        <div class="hero-callout">
+          <div class="callout-label">Backend contract</div>
+          <code>inspect -&gt; default_config -&gt; build</code>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="eyebrow">Setup</div>
+              <h2>Backend Paths</h2>
+            </div>
+            <button id="guess-paths" class="ghost-button">Guess Paths</button>
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Rscript</span>
+              <div class="path-row">
+                <input id="rscript-path" type="text" placeholder="/opt/homebrew/bin/Rscript" />
+                <button id="browse-rscript" type="button">Browse</button>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>KaroSpaceR Repo</span>
+              <div class="path-row">
+                <input id="karospacer-root" type="text" placeholder="/path/to/KaroSpaceR" />
+                <button id="browse-karospacer-root" type="button">Browse</button>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Input RDS</span>
+              <div class="path-row">
+                <input id="input-path" type="text" placeholder="/path/to/object.rds" />
+                <button id="browse-input" type="button">Browse</button>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Metadata Input (Optional)</span>
+              <div class="path-row">
+                <input id="metadata-input-path" type="text" placeholder="/path/to/metadata.rds" />
+                <button id="browse-metadata-input" type="button">Browse</button>
+              </div>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="inspect-button" class="primary-button">Inspect Dataset</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="eyebrow">Inspect</div>
+              <h2>Dataset Summary</h2>
+            </div>
+          </div>
+
+          <div id="inspect-empty" class="empty-state">
+            Run inspect to populate defaults, columns, assays, graphs, and a starter build config.
+          </div>
+
+          <div id="inspect-content" class="inspect-layout hidden">
+            <div class="summary-block">
+              <h3>Defaults</h3>
+              <dl id="defaults-summary" class="summary-list"></dl>
+            </div>
+            <div class="summary-block">
+              <h3>Capabilities</h3>
+              <dl id="capabilities-summary" class="summary-list"></dl>
+            </div>
+            <div class="summary-block full-span">
+              <h3>Columns</h3>
+              <div id="column-summary" class="column-chip-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="eyebrow">Build</div>
+              <h2>Export Config</h2>
+            </div>
+            <button id="choose-output" class="ghost-button">Choose Output</button>
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Output HTML</span>
+              <input id="config-output" type="text" placeholder="/path/to/viewer.html" />
+            </label>
+
+            <label class="field">
+              <span>Title</span>
+              <input id="config-title" type="text" placeholder="Viewer title" />
+            </label>
+
+            <label class="field">
+              <span>Group By</span>
+              <select id="config-groupby"></select>
+            </label>
+
+            <label class="field">
+              <span>Initial Color</span>
+              <select id="config-initial-color"></select>
+            </label>
+
+            <label class="field">
+              <span>Assay</span>
+              <select id="config-assay"></select>
+            </label>
+
+            <label class="field">
+              <span>Theme</span>
+              <select id="config-theme">
+                <option value="light">light</option>
+                <option value="dark">dark</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Top Genes</span>
+              <input id="config-top-genes" type="number" min="1" step="1" placeholder="200" />
+            </label>
+
+            <label class="field">
+              <span>Neighbor Mode</span>
+              <select id="config-neighbor-mode">
+                <option value="spatial">spatial</option>
+                <option value="existing">existing</option>
+                <option value="auto">auto</option>
+                <option value="none">none</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Marker Test</span>
+              <select id="config-marker-test">
+                <option value="mean_diff">mean_diff</option>
+                <option value="wilcoxon">wilcoxon</option>
+              </select>
+            </label>
+
+            <label class="field checkbox-field">
+              <span>Lightweight Export</span>
+              <input id="config-lightweight" type="checkbox" />
+            </label>
+          </div>
+
+          <div class="field">
+            <span>Additional Colors</span>
+            <div id="additional-colors" class="checkbox-grid"></div>
+          </div>
+
+          <div class="field">
+            <span>Interaction Marker Colors</span>
+            <div id="interaction-groupby" class="checkbox-grid"></div>
+          </div>
+
+          <div class="field">
+            <span>Config Preview</span>
+            <textarea id="config-preview" spellcheck="false" readonly></textarea>
+          </div>
+
+          <div class="actions">
+            <button id="build-button" class="primary-button">Build Viewer</button>
+            <button id="open-output-button" class="ghost-button" disabled>Open Output</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="eyebrow">Logs</div>
+              <h2>Run Output</h2>
+            </div>
+          </div>
+          <pre id="log-output" class="log-output">Ready.</pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
