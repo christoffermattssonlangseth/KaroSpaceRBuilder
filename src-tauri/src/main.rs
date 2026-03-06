@@ -24,8 +24,6 @@ struct InspectRequest {
 struct BuildRequest {
     rscript_path: String,
     karospacer_root: String,
-    input_path: String,
-    metadata_input_path: Option<String>,
     config: Value,
 }
 
@@ -88,12 +86,18 @@ fn script_path(root: &str, script_name: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn run_rscript<I, S>(rscript_path: &str, script: &Path, args: I) -> Result<CommandOutput, String>
+fn run_rscript<I, S>(
+    rscript_path: &str,
+    working_dir: &Path,
+    script: &Path,
+    args: I,
+) -> Result<CommandOutput, String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let output = Command::new(rscript_path)
+        .current_dir(working_dir)
         .arg(script)
         .args(args)
         .output()
@@ -182,6 +186,7 @@ fn pick_path(request: PickPathRequest) -> Result<Option<String>, String> {
 #[tauri::command]
 fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
     ensure_backend_paths(&request.rscript_path, &request.karospacer_root)?;
+    let karospacer_root = Path::new(&request.karospacer_root);
     let script = script_path(&request.karospacer_root, "karospace_inspect_r.R")?;
 
     let mut args = vec!["--input".to_string(), request.input_path.clone()];
@@ -208,7 +213,7 @@ fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
         args.push(gene_limit.to_string());
     }
 
-    let output = run_rscript(&request.rscript_path, &script, args)?;
+    let output = run_rscript(&request.rscript_path, karospacer_root, &script, args)?;
     if output.status != 0 {
         return Err(format!(
             "Inspect failed with status {}.\nstdout:\n{}\nstderr:\n{}",
@@ -232,6 +237,7 @@ fn inspect_dataset(request: InspectRequest) -> Result<InspectResponse, String> {
 #[tauri::command]
 fn build_viewer(request: BuildRequest) -> Result<BuildResponse, String> {
     ensure_backend_paths(&request.rscript_path, &request.karospacer_root)?;
+    let karospacer_root = Path::new(&request.karospacer_root);
     let script = script_path(&request.karospacer_root, "karospace_build_r.R")?;
 
     let output_path = request
@@ -252,6 +258,7 @@ fn build_viewer(request: BuildRequest) -> Result<BuildResponse, String> {
 
     let output = run_rscript(
         &request.rscript_path,
+        karospacer_root,
         &script,
         [
             "--config".to_string(),
