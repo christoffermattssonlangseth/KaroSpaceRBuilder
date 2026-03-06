@@ -3,3 +3,5 @@ src-tauri/target/
 src-tauri/gen/
 dist/
 .DS_Store
+bundle-resources/macos-arm64/*
+!bundle-resources/macos-arm64/.gitkeep

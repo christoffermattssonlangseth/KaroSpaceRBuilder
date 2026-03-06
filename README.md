@@ -8,15 +8,16 @@ through two backend contracts:
 - `scripts/karospace_inspect_r.R` for machine-readable dataset inspection
 - `scripts/karospace_build_r.R --config build.json` for export
 
-## MVP assumptions
+## Runtime modes
 
-- `Rscript` is installed on the machine
-- the app bundles the required `KaroSpaceR` backend files
-- this app shells out to those scripts instead of bundling an R runtime
+- The app always bundles the required `KaroSpaceR` backend files from `vendor/KaroSpaceR`.
+- On Apple Silicon, you can stage a bundled R runtime into `bundle-resources/macos-arm64`
+  and package a self-contained macOS app.
+- If no bundled runtime is present, the app falls back to a user-provided `Rscript`.
 
 ## Current flow
 
-1. choose `Rscript`
+1. use the bundled Apple Silicon R runtime when present, otherwise choose `Rscript`
 2. choose an `.rds` input
 3. run inspect
 4. edit the generated build config in the form
@@ -31,34 +32,54 @@ npm run dev
 npm run build
 ```
 
+To stage a local Apple Silicon R runtime into the app resources before packaging:
+
+```bash
+npm run stage:r
+npm run build -- --target aarch64-apple-darwin
+```
+
 ## Notes
 
 - This scaffold uses a plain static frontend and Tauri's built-in dev server.
-- It prefers explicit `Rscript` selection over hidden assumptions about shell `$PATH`.
+- It prefers a bundled Apple Silicon runtime when one is present.
+- Fallback `Rscript` selection is still supported for dev mode and non-bundled builds.
 - The bundled backend snapshot lives in `vendor/KaroSpaceR`.
-- The packaged app bundles `KaroSpaceR`, but it does not bundle an R runtime.
+- The staged Apple Silicon runtime lives in `bundle-resources/macos-arm64` and is intentionally gitignored.
+- The runtime staging script rewrites library paths so the packaged `.app` can run without `/Library/Frameworks/R.framework`.
+
+## Apple Silicon bundled-R prototype
+
+The local Apple Silicon packaging path is now working end to end:
+
+- stage `R.framework` plus the current package library with `npm run stage:r`
+- build the Tauri app/DMG for `aarch64-apple-darwin`
+- run inspect/build through the packaged app's embedded `karospacer-rscript`
+
+This has been smoke-tested locally against:
+
+- `/Users/chrislangseth/Downloads/28124747/IntegratedHeartST.rds`
+
+and successfully produced a packaged-app export HTML.
 
 ## GitHub Releases
 
-macOS release builds are published from GitHub Actions when you push a `v*` tag,
-for example:
+The current reliable release path for the bundled-R Apple Silicon app is manual
+from this Mac, using the DMG built after `npm run stage:r`.
+
+Example:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+gh release create v0.2.0 \
+  src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/KaroSpaceRBuilder_0.2.0_aarch64.dmg \
+  --title "KaroSpaceRBuilder v0.2.0" \
+  --notes "Apple Silicon DMG with bundled KaroSpaceR backend and bundled R runtime."
 ```
 
-The workflow in `.github/workflows/desktop-release.yml` creates or updates the
-GitHub Release for that tag and uploads signed/notarized macOS DMGs for:
-
-- Apple Silicon: `aarch64-apple-darwin`
-- Intel Mac: `x86_64-apple-darwin`
-
-Downloaded releases include the bundled `KaroSpaceR` backend, but end users
-still need:
-
-- `Rscript`
-- the required R packages for their datasets
+The GitHub Actions workflow in `.github/workflows/desktop-release.yml` is kept
+for future CI validation, but automatic tagged releases are intentionally paused
+until CI-side runtime staging exists. That avoids publishing a fallback build
+that silently drops the bundled R runtime.
 
 ## GitHub Signing Secrets
 

@@ -1,6 +1,6 @@
 [package]
 name = "karospacer_builder"
-version = "0.1.0"
+version = "0.2.0"
 description = "Desktop wrapper for the KaroSpaceR inspect and build contracts"
 authors = ["Chris Langseth"]
 edition = "2021"

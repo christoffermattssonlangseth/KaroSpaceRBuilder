@@ -11,7 +11,7 @@ use tauri::Manager;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InspectRequest {
-    rscript_path: String,
+    rscript_path: Option<String>,
     input_path: String,
     metadata_input_path: Option<String>,
     assay: Option<String>,
@@ -22,7 +22,7 @@ struct InspectRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BuildRequest {
-    rscript_path: String,
+    rscript_path: Option<String>,
     config: Value,
 }
 
@@ -54,6 +54,10 @@ struct BuildResponse {
 #[serde(rename_all = "camelCase")]
 struct SuggestedPaths {
     rscript_path: Option<String>,
+    runtime_mode: String,
+    bundled_rscript_path: Option<String>,
+    bundled_r_home: Option<String>,
+    bundled_r_version: Option<String>,
     backend_version: Option<String>,
     backend_revision: Option<String>,
 }
@@ -63,6 +67,12 @@ struct CommandOutput {
     status: i32,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Debug)]
+struct ResolvedRuntime {
+    rscript_path: PathBuf,
+    r_home: Option<PathBuf>,
 }
 
 fn canonicalize_lossy(path: impl AsRef<Path>) -> String {
@@ -87,7 +97,7 @@ fn script_path(root: &Path, script_name: &str) -> Result<PathBuf, String> {
 }
 
 fn run_rscript<I, S>(
-    rscript_path: &str,
+    runtime: &ResolvedRuntime,
     working_dir: &Path,
     script: &Path,
     args: I,
@@ -96,10 +106,21 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = Command::new(rscript_path)
-        .current_dir(working_dir)
-        .arg(script)
-        .args(args)
+    let mut command = Command::new(&runtime.rscript_path);
+    command.current_dir(working_dir).arg(script).args(args);
+
+    if let Some(r_home) = runtime.r_home.as_ref() {
+        let library_path = r_home.join("library");
+        command
+            .env("R_HOME", r_home)
+            .env("R_LIBS", &library_path)
+            .env("R_LIBS_SITE", &library_path)
+            .env("R_LIBS_USER", &library_path)
+            .env("R_PROFILE_USER", "")
+            .env("R_ENVIRON_USER", "");
+    }
+
+    let output = command
         .output()
         .map_err(|err| format!("Failed to run Rscript: {err}"))?;
 
@@ -146,6 +167,13 @@ fn bundled_backend_dev_root() -> PathBuf {
         .join("KaroSpaceR")
 }
 
+fn bundled_r_dev_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("bundle-resources")
+        .join("macos-arm64")
+}
+
 fn description_field(root: &Path, field_name: &str) -> Option<String> {
     let description = fs::read_to_string(root.join("DESCRIPTION")).ok()?;
     let prefix = format!("{field_name}:");
@@ -164,6 +192,82 @@ fn vendored_revision(root: &Path) -> Option<String> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string)
+    })
+}
+
+fn bundled_r_framework_root(root: &Path) -> PathBuf {
+    root.join("R.framework")
+}
+
+fn bundled_r_home(root: &Path) -> Option<PathBuf> {
+    let framework_root = bundled_r_framework_root(root);
+    let direct_resources = framework_root.join("Resources");
+    if direct_resources.join("bin").join("exec").join("R").exists() {
+        return Some(direct_resources);
+    }
+
+    let current_resources = framework_root
+        .join("Versions")
+        .join("Current")
+        .join("Resources");
+    if current_resources
+        .join("bin")
+        .join("exec")
+        .join("R")
+        .exists()
+    {
+        return Some(current_resources);
+    }
+
+    let versions_dir = framework_root.join("Versions");
+    let mut version_dirs = fs::read_dir(&versions_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    version_dirs.sort();
+
+    version_dirs.into_iter().find_map(|version_dir| {
+        let resources = version_dir.join("Resources");
+        resources
+            .join("bin")
+            .join("exec")
+            .join("R")
+            .exists()
+            .then_some(resources)
+    })
+}
+
+fn bundled_rscript_path(root: &Path) -> PathBuf {
+    root.join("bin").join("karospacer-rscript")
+}
+
+fn bundled_r_version(root: &Path) -> Option<String> {
+    fs::read_link(
+        bundled_r_framework_root(root)
+            .join("Versions")
+            .join("Current"),
+    )
+    .ok()
+    .and_then(|path| {
+        path.file_name()
+            .map(|value| value.to_string_lossy().to_string())
+    })
+    .or_else(|| {
+        let versions_dir = bundled_r_framework_root(root).join("Versions");
+        let mut versions = fs::read_dir(versions_dir)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|value| value.to_string_lossy().to_string())
+            })
+            .collect::<Vec<_>>();
+        versions.sort();
+        versions.into_iter().next()
     })
 }
 
@@ -191,11 +295,85 @@ fn resolve_bundled_backend_root(app: &tauri::AppHandle) -> Result<PathBuf, Strin
     ))
 }
 
+fn resolve_bundled_r_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dev_candidate = bundled_r_dev_root();
+    if bundled_rscript_path(&dev_candidate).exists() {
+        return Ok(dev_candidate);
+    }
+
+    let resource_candidate = app
+        .path()
+        .resource_dir()
+        .map_err(|err| format!("Could not resolve the app resource directory: {err}"))?
+        .join("runtime")
+        .join("macos-arm64");
+
+    if bundled_rscript_path(&resource_candidate).exists() {
+        return Ok(resource_candidate);
+    }
+
+    Err(format!(
+        "Could not resolve a bundled Apple Silicon R runtime. Looked in:\n- {}\n- {}",
+        dev_candidate.to_string_lossy(),
+        resource_candidate.to_string_lossy()
+    ))
+}
+
+fn resolve_runtime(
+    app: &tauri::AppHandle,
+    requested_rscript_path: Option<&str>,
+) -> Result<ResolvedRuntime, String> {
+    if let Ok(root) = resolve_bundled_r_root(app) {
+        let r_home = bundled_r_home(&root).ok_or_else(|| {
+            format!(
+                "Found a bundled Apple Silicon R runtime, but could not resolve its R home inside {}",
+                root.to_string_lossy()
+            )
+        })?;
+        return Ok(ResolvedRuntime {
+            rscript_path: bundled_rscript_path(&root),
+            r_home: Some(r_home),
+        });
+    }
+
+    let requested_path = requested_rscript_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(suggest_rscript_path);
+
+    let rscript_path = requested_path.ok_or_else(|| {
+        "No bundled Apple Silicon R runtime was found, and no external Rscript path was provided."
+            .to_string()
+    })?;
+    ensure_rscript_path(&rscript_path)?;
+
+    Ok(ResolvedRuntime {
+        rscript_path: PathBuf::from(rscript_path),
+        r_home: None,
+    })
+}
+
 #[tauri::command]
 fn guess_backend_paths(app: tauri::AppHandle) -> SuggestedPaths {
     let backend_root = resolve_bundled_backend_root(&app).ok();
+    let bundled_runtime = resolve_bundled_r_root(&app).ok();
     SuggestedPaths {
         rscript_path: suggest_rscript_path(),
+        runtime_mode: if bundled_runtime.is_some() {
+            "bundled".to_string()
+        } else {
+            "external".to_string()
+        },
+        bundled_rscript_path: bundled_runtime
+            .as_deref()
+            .map(bundled_rscript_path)
+            .map(canonicalize_lossy),
+        bundled_r_home: bundled_runtime
+            .as_deref()
+            .and_then(bundled_r_home)
+            .map(canonicalize_lossy),
+        bundled_r_version: bundled_runtime.as_deref().and_then(bundled_r_version),
         backend_version: backend_root
             .as_deref()
             .and_then(|root| description_field(root, "Version")),
@@ -230,7 +408,7 @@ fn inspect_dataset(
     app: tauri::AppHandle,
     request: InspectRequest,
 ) -> Result<InspectResponse, String> {
-    ensure_rscript_path(&request.rscript_path)?;
+    let runtime = resolve_runtime(&app, request.rscript_path.as_deref())?;
     let backend_root = resolve_bundled_backend_root(&app)?;
     let script = script_path(&backend_root, "karospace_inspect_r.R")?;
 
@@ -258,7 +436,7 @@ fn inspect_dataset(
         args.push(gene_limit.to_string());
     }
 
-    let output = run_rscript(&request.rscript_path, &backend_root, &script, args)?;
+    let output = run_rscript(&runtime, &backend_root, &script, args)?;
     if output.status != 0 {
         return Err(format!(
             "Inspect failed with status {}.\nstdout:\n{}\nstderr:\n{}",
@@ -281,7 +459,7 @@ fn inspect_dataset(
 
 #[tauri::command]
 fn build_viewer(app: tauri::AppHandle, request: BuildRequest) -> Result<BuildResponse, String> {
-    ensure_rscript_path(&request.rscript_path)?;
+    let runtime = resolve_runtime(&app, request.rscript_path.as_deref())?;
     let backend_root = resolve_bundled_backend_root(&app)?;
     let script = script_path(&backend_root, "karospace_build_r.R")?;
 
@@ -302,7 +480,7 @@ fn build_viewer(app: tauri::AppHandle, request: BuildRequest) -> Result<BuildRes
         .map_err(|err| format!("Failed to write temporary config file: {err}"))?;
 
     let output = run_rscript(
-        &request.rscript_path,
+        &runtime,
         &backend_root,
         &script,
         [

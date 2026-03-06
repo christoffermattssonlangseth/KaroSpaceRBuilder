@@ -66,26 +66,38 @@ function requireInvoke() {
 
 function pathPayload() {
   return {
-    rscriptPath: elements.rscriptPath.value.trim(),
+    rscriptPath: elements.rscriptPath.value.trim() || null,
     inputPath: elements.inputPath.value.trim(),
     metadataInputPath: elements.metadataInputPath.value.trim() || null
   };
 }
 
+function usingBundledRuntime() {
+  return state.backendInfo?.runtimeMode === "bundled";
+}
+
 function assertRequiredPaths() {
   const paths = pathPayload();
-  if (!paths.rscriptPath) throw new Error("Rscript path is required.");
+  if (!usingBundledRuntime() && !paths.rscriptPath) {
+    throw new Error("Rscript path is required when no bundled Apple Silicon runtime is available.");
+  }
   if (!paths.inputPath) throw new Error("Input RDS path is required.");
   return paths;
 }
 
 function formatBackendSummary(info = null) {
-  if (!info?.backendVersion) {
-    return "KaroSpaceR is bundled with the app. Only Rscript is required locally.";
+  const backendLabel = info?.backendVersion
+    ? `Bundled KaroSpaceR ${info.backendVersion}${info.backendRevision ? ` (${info.backendRevision})` : ""}.`
+    : "KaroSpaceR is bundled with the app.";
+
+  if (info?.runtimeMode === "bundled") {
+    const bundledR = info.bundledRVersion
+      ? `Bundled Apple Silicon R ${info.bundledRVersion}`
+      : "Bundled Apple Silicon R runtime";
+    return `${bundledR} will be used automatically. ${backendLabel}`;
   }
 
-  const revision = info.backendRevision ? ` (${info.backendRevision})` : "";
-  return `Bundled KaroSpaceR ${info.backendVersion}${revision}. Only Rscript is required locally.`;
+  return `${backendLabel} No bundled R runtime was found, so a local Rscript path is required.`;
 }
 
 function setSelectOptions(select, values, allowEmpty = false) {
@@ -288,11 +300,13 @@ async function guessPaths() {
   try {
     const result = await callBackend("guess_backend_paths", {});
     state.backendInfo = result;
-    if (result.rscriptPath) elements.rscriptPath.value = result.rscriptPath;
+    if (!usingBundledRuntime() && result.rscriptPath) {
+      elements.rscriptPath.value = result.rscriptPath;
+    }
     elements.backendSummary.textContent = formatBackendSummary(result);
     log(
-      result.rscriptPath
-        ? `Guessed Rscript path.\n${formatBackendSummary(result)}`
+      !usingBundledRuntime() && result.rscriptPath
+        ? `Guessed fallback Rscript path.\n${formatBackendSummary(result)}`
         : formatBackendSummary(result),
       "replace"
     );

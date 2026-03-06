@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "KaroSpaceRBuilder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "org.karospace.karospacerbuilder",
   "build": {
     "frontendDist": "../src"
@@ -26,7 +26,8 @@
   "bundle": {
     "active": true,
     "resources": {
-      "../vendor/KaroSpaceR": "backend/KaroSpaceR"
+      "../vendor/KaroSpaceR": "backend/KaroSpaceR",
+      "../bundle-resources/macos-arm64": "runtime/macos-arm64"
     },
     "targets": "all",
     "icon": ["icons/icon.png", "icons/icon.icns"]

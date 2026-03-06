@@ -1,9 +1,12 @@
 name: Desktop Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to publish, for example v0.2.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,7 +20,6 @@ jobs:
       matrix:
         rust_target:
           - aarch64-apple-darwin
-          - x86_64-apple-darwin
 
     steps:
       - name: Checkout
@@ -41,6 +43,15 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Ensure bundled Apple Silicon runtime is staged
+        shell: bash
+        run: |
+          test -x bundle-resources/macos-arm64/bin/karospacer-rscript || {
+            echo "Bundled Apple Silicon R runtime is not staged in this checkout." >&2
+            echo "CI release publishing is intentionally blocked until runtime staging is added to the workflow." >&2
+            exit 1
+          }
 
       - name: Import Apple signing certificate
         shell: bash
@@ -81,8 +92,8 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: KaroSpaceRBuilder ${{ github.ref_name }}
+          tagName: ${{ github.event.inputs.tag_name }}
+          releaseName: KaroSpaceRBuilder ${{ github.event.inputs.tag_name }}
           releaseBody: |
             Signed macOS DMG release for KaroSpaceRBuilder.
 

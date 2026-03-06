@@ -12,7 +12,8 @@ It must remain a thin UI/process layer. It should help a user choose files, insp
 - Do not add dataset normalization, Seurat parsing, or payload-building logic here.
 - Do not modify the Python `KaroSpace` repository from this repo.
 - Do not assume shell startup files will populate `$PATH` inside a desktop app.
-- Treat `Rscript` as an explicit dependency.
+- Treat `Rscript` as an explicit dependency unless a bundled runtime is present.
+- If bundling R, keep that work limited to runtime/package delivery and process launching. Do not move exporter logic out of `KaroSpaceR`.
 - Treat the bundled `vendor/KaroSpaceR` snapshot as the runtime backend, while keeping the sibling `../KaroSpaceR` repo as the canonical upstream source.
 
 ## Backend Contract
@@ -63,7 +64,13 @@ Not implemented yet:
 - persistent settings storage
 - progress streaming from long-running R jobs
 - richer validation and better field-level error rendering
-- bundled R runtime
+- CI-side staging and release automation for the bundled Apple Silicon R runtime
+
+Current experimental direction:
+
+- Apple Silicon local packaging now bundles an R runtime from `bundle-resources/macos-arm64`
+- the app should prefer that bundled runtime over a user-supplied `Rscript` when present
+- keep Intel support and broader release automation secondary until the Apple Silicon packaged app works end to end in CI too
 
 ## Repo Structure
 
@@ -83,6 +90,10 @@ Not implemented yet:
   Tauri window capability declaration.
 - `.github/workflows/desktop-release.yml`
   Tagged macOS release packaging/signing pipeline.
+- `scripts/stage_bundled_r.sh`
+  Local Apple Silicon R runtime staging script for packaging experiments.
+- `bundle-resources/macos-arm64/`
+  Gitignored staging area for the Apple Silicon bundled R runtime.
 
 ## Working Rules For Agents
 
@@ -93,14 +104,19 @@ Not implemented yet:
 - Use the inspect JSON `default_config` as the source of truth for initial UI state.
 - Keep the builder resilient to missing tools and bad paths with clear error messages.
 - Keep the vendored backend snapshot traceable to an upstream `KaroSpaceR` revision.
+- If bundling R, prefer a bundled `Rscript` plus bundled package library configured through explicit environment variables such as `R_HOME` and library paths.
+- Keep any bundled R runtime/package set pinned and reproducible.
+- De-risk runtime bundling on Apple Silicon first before expanding to Intel macOS builds.
+- Be careful with macOS framework symlinks in packaged resources. Tauri may flatten parts of the bundle, so runtime resolution must handle both symlinked and materialized layouts.
 - Prefer calling existing Rust commands over adding frontend-only assumptions.
 
 ## Tauri Notes
 
 - This repo is using Tauri v2 concepts and config structure.
 - GUI apps often do not inherit shell environment setup, so do not assume `Rscript` is discoverable automatically.
-- Prefer letting the user browse to `Rscript` explicitly.
+- Prefer letting the user browse to `Rscript` explicitly unless a bundled runtime is available.
 - Resolve bundled backend files from app resources in packaged builds instead of assuming a sibling checkout exists.
+- If a bundled R runtime is introduced, resolve it from app resources in packaged builds and from explicit local paths in dev.
 - Avoid broad command execution surfaces; keep Rust commands narrow and task-specific.
 - If adding OS integrations, keep macOS first and avoid unnecessary platform-specific branching until needed.
 
@@ -120,6 +136,7 @@ If Tauri dependencies are installed, also run:
 
 ```bash
 npm install
+npm run stage:r
 npm run dev
 ```
 
@@ -135,11 +152,11 @@ Rscript vendor/KaroSpaceR/scripts/karospace_build_r.R --config /path/to/build.js
 Priority order for future work:
 
 1. add better inspect/build error presentation in the UI
-2. persist last-used `Rscript` path
-3. add progress/log streaming for long exports
-4. improve config editing UX for colors, genes, and advanced options
-5. validate the signed macOS GitHub release flow with real Apple secrets
-6. evaluate whether bundling an R runtime is worth the complexity
+2. validate the Apple Silicon bundled R runtime in the signed macOS GitHub release flow
+3. persist last-used `Rscript` path for fallback/manual mode
+4. add progress/log streaming for long exports
+5. improve config editing UX for colors, genes, and advanced options
+6. decide whether Intel support is worth the added runtime-packaging complexity
 
 ## Output Expectations
 

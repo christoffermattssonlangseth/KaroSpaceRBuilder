@@ -1,9 +1,10 @@
 {
   "name": "karospacer-builder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "stage:r": "./scripts/stage_bundled_r.sh",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build"

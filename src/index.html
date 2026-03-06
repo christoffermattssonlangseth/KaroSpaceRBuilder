@@ -33,22 +33,22 @@
               <div class="eyebrow">Setup</div>
               <h2>Runtime</h2>
             </div>
-            <button id="guess-paths" class="ghost-button">Guess Rscript</button>
+            <button id="guess-paths" class="ghost-button">Check Runtime</button>
           </div>
 
           <div class="field-grid">
             <label class="field">
-              <span>Rscript</span>
+              <span>Rscript Fallback</span>
               <div class="path-row">
-                <input id="rscript-path" type="text" placeholder="/opt/homebrew/bin/Rscript" />
+                <input id="rscript-path" type="text" placeholder="Optional when bundled Apple Silicon R is available" />
                 <button id="browse-rscript" type="button">Browse</button>
               </div>
             </label>
 
             <div class="field field-note">
-              <span>Bundled Backend</span>
+              <span>Bundled Runtime</span>
               <div id="backend-summary" class="inline-note">
-                KaroSpaceR is bundled with the app. Only Rscript is required locally.
+                KaroSpaceR is bundled with the app. A bundled Apple Silicon R runtime will be used when present.
               </div>
             </div>
 
